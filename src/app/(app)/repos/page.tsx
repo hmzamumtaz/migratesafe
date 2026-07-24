@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { DBConnectionStatus } from "@/components/design-system/verdict-badge";
 import { LoadingTableSkeleton, EmptyState } from "@/components/design-system/states";
 import { timeAgo } from "@/lib/utils";
-import { GitBranch, Plus, Settings, Shield, Loader2, RefreshCw } from "lucide-react";
+import { GitBranch, Plus, Settings, Shield, Loader2, RefreshCw, ExternalLink, AlertCircle, Info } from "lucide-react";
 import Link from "next/link";
 import { GithubIcon } from "@/components/ui/github-icon";
 
@@ -17,18 +17,25 @@ export default function ReposPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalTab, setModalTab] = useState<"manual" | "github">("github");
-  const [newRepo, setNewRepo] = useState({ name: "", fullName: "", provider: "github" });
+  const [newRepo, setNewRepo] = useState({ name: "", fullName: "", provider: "github", defaultBranch: "main" });
   const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState("");
   const [ghRepos, setGhRepos] = useState<GitHubRepo[]>([]);
   const [ghLoading, setGhLoading] = useState(false);
   const [ghConnected, setGhConnected] = useState(false);
+  const [ghError, setGhError] = useState("");
 
   useEffect(() => {
     fetch("/api/repositories").then((r) => r.json()).then((d) => { setRepos(d.repositories || []); setLoading(false); });
   }, []);
 
+  const connectGitHub = () => {
+    window.location.href = "/api/auth/github?redirect=/repos";
+  };
+
   const loadGitHubRepos = async () => {
     setGhLoading(true);
+    setGhError("");
     try {
       const res = await fetch("/api/repositories/github");
       if (res.ok) {
@@ -36,16 +43,22 @@ export default function ReposPage() {
         setGhRepos(data.repos || []);
         setGhConnected(true);
       } else {
-        setGhConnected(false);
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 400 && data.error === "GitHub not connected") {
+          setGhConnected(false);
+        } else {
+          setGhError(data.error || "Failed to load repositories");
+        }
       }
     } catch {
-      setGhConnected(false);
+      setGhError("Network error. Please try again.");
     }
     setGhLoading(false);
   };
 
   const handleImportFromGitHub = async (ghRepo: GitHubRepo) => {
     setConnecting(true);
+    setConnectError("");
     try {
       const res = await fetch("/api/repositories/connect", {
         method: "POST",
@@ -54,31 +67,54 @@ export default function ReposPage() {
           name: ghRepo.name,
           fullName: ghRepo.fullName,
           provider: "github",
+          defaultBranch: ghRepo.defaultBranch,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setRepos([data.repository, ...repos]);
         setShowModal(false);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setConnectError(data.error || "Failed to connect repository");
       }
-    } catch { }
+    } catch {
+      setConnectError("Network error");
+    }
     setConnecting(false);
   };
 
   const handleConnect = async () => {
     setConnecting(true);
-    const res = await fetch("/api/repositories/connect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newRepo),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setRepos([data.repository, ...repos]);
-      setShowModal(false);
-      setNewRepo({ name: "", fullName: "", provider: "github" });
+    setConnectError("");
+    try {
+      const res = await fetch("/api/repositories/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRepo),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRepos([data.repository, ...repos]);
+        setShowModal(false);
+        setNewRepo({ name: "", fullName: "", provider: "github", defaultBranch: "main" });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setConnectError(data.error || "Failed to connect repository");
+      }
+    } catch {
+      setConnectError("Network error");
     }
     setConnecting(false);
+  };
+
+  const parseGithubUrl = (url: string) => {
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (match) {
+      const fullName = `${match[1]}/${match[2]}`.replace(/\.git$/, "");
+      const name = match[2].replace(/\.git$/, "");
+      setNewRepo({ ...newRepo, name, fullName });
+    }
   };
 
   return (
@@ -88,13 +124,13 @@ export default function ReposPage() {
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Repositories</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Manage connected repositories and their database connections.</p>
         </div>
-        <button onClick={() => { setShowModal(true); setModalTab("github"); loadGitHubRepos(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
+        <button onClick={() => { setShowModal(true); setModalTab("github"); setGhConnected(false); setGhRepos([]); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
           <Plus className="h-4 w-4" /> Connect repository
         </button>
       </div>
 
       {loading ? <LoadingTableSkeleton rows={3} /> : repos.length === 0 ? (
-        <EmptyState title="No repositories connected" description="Connect a repository to start reviewing migrations." action={<button onClick={() => { setShowModal(true); setModalTab("github"); loadGitHubRepos(); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors"><Plus className="h-4 w-4" /> Connect repository</button>} />
+        <EmptyState title="No repositories connected" description="Connect a repository to start reviewing migrations." action={<button onClick={() => { setShowModal(true); setModalTab("github"); }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors"><Plus className="h-4 w-4" /> Connect repository</button>} />
       ) : (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden divide-y divide-[var(--border)]">
           {repos.map((repo) => (
@@ -142,17 +178,25 @@ export default function ReposPage() {
             {modalTab === "github" ? (
               <div className="space-y-3">
                 {!ghConnected ? (
-                  <div className="text-center py-8">
+                  <div className="text-center py-6">
                     <GithubIcon className="h-10 w-10 mx-auto text-[var(--text-tertiary)] mb-3" />
-                    <p className="text-sm text-[var(--text-secondary)] mb-4">Connect your GitHub account to import repositories.</p>
-                    <button onClick={loadGitHubRepos} disabled={ghLoading} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-                      {ghLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GithubIcon className="h-4 w-4" />}
-                      Load repositories
+                    <p className="text-sm text-[var(--text-secondary)] mb-1">Connect your GitHub account to import repositories.</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mb-4">We only request read access to your repositories.</p>
+                    <button onClick={connectGitHub} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#24292f] rounded-lg hover:bg-[#1c2128] transition-colors">
+                      <GithubIcon className="h-4 w-4" /> Connect GitHub account
                     </button>
                   </div>
-                ) : ghRepos.length === 0 ? (
+                ) : ghRepos.length === 0 && !ghError ? (
                   <div className="text-center py-8">
                     <p className="text-sm text-[var(--text-secondary)]">No repositories found. Make sure you have access to repositories.</p>
+                  </div>
+                ) : ghError ? (
+                  <div className="text-center py-8">
+                    <AlertCircle className="h-8 w-8 mx-auto text-[#B3261E] dark:text-[#F87171] mb-2" />
+                    <p className="text-sm text-[var(--text-secondary)] mb-3">{ghError}</p>
+                    <button onClick={connectGitHub} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#24292f] rounded-lg hover:bg-[#1c2128] transition-colors">
+                      <GithubIcon className="h-4 w-4" /> Re-connect GitHub
+                    </button>
                   </div>
                 ) : (
                   <div className="max-h-80 overflow-y-auto space-y-2">
@@ -160,7 +204,7 @@ export default function ReposPage() {
                       <div key={repo.id} className="flex items-center gap-3 p-3 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)] transition-colors">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[var(--text-primary)] truncate">{repo.fullName}</p>
-                          <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{repo.description || "No description"}</p>
+                          <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{repo.description || "No description"} {repo.private && "· Private"}</p>
                         </div>
                         <button onClick={() => handleImportFromGitHub(repo)} disabled={connecting} className="px-3 py-1.5 text-xs font-medium text-brand border border-brand rounded-lg hover:bg-brand hover:text-white transition-colors disabled:opacity-50">
                           Import
@@ -176,24 +220,47 @@ export default function ReposPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)]">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 text-brand flex-shrink-0 mt-0.5" />
+                    <div className="text-xs text-[var(--text-secondary)] space-y-1">
+                      <p className="font-medium text-[var(--text-primary)]">How manual repositories work:</p>
+                      <ul className="list-disc list-inside space-y-0.5 text-[var(--text-tertiary)]">
+                        <li>Paste your repo URL or enter the owner/repo name</li>
+                        <li>MigrateSafe will scan for migration files on your default branch</li>
+                        <li>Connect a read-only database for schema-aware analysis</li>
+                        <li>Run checks by pasting SQL or uploading migration files</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Repository name</label>
                   <input value={newRepo.name} onChange={(e) => setNewRepo({ ...newRepo, name: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder:text-[var(--text-tertiary)]" placeholder="acme-api" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Full name (owner/repo)</label>
-                  <input value={newRepo.fullName} onChange={(e) => setNewRepo({ ...newRepo, fullName: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder:text-[var(--text-tertiary)]" placeholder="acme-corp/acme-api" />
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Full name or GitHub URL</label>
+                  <input value={newRepo.fullName} onChange={(e) => { setNewRepo({ ...newRepo, fullName: e.target.value }); parseGithubUrl(e.target.value); }} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder:text-[var(--text-tertiary)]" placeholder="acme-corp/acme-api or https://github.com/acme-corp/acme-api" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Provider</label>
-                  <select value={newRepo.provider} onChange={(e) => setNewRepo({ ...newRepo, provider: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand">
-                    <option value="github">GitHub</option>
-                    <option value="gitlab">GitLab</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Provider</label>
+                    <select value={newRepo.provider} onChange={(e) => setNewRepo({ ...newRepo, provider: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand">
+                      <option value="github">GitHub</option>
+                      <option value="gitlab">GitLab</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Default branch</label>
+                    <input value={newRepo.defaultBranch} onChange={(e) => setNewRepo({ ...newRepo, defaultBranch: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand placeholder:text-[var(--text-tertiary)]" placeholder="main" />
+                  </div>
                 </div>
               </div>
             )}
+
+            {connectError && <div className="mt-3 px-3 py-2 rounded-lg bg-[#B3261E]/10 text-[#B3261E] dark:text-[#F87171] text-sm">{connectError}</div>}
 
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg)] transition-colors">Cancel</button>

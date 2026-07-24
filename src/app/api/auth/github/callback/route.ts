@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, getGitHubUser, getUserEmails } from "@/lib/github";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
+
+  const cookieStore = await cookies();
+  const redirectTo = cookieStore.get("gh-oauth-redirect")?.value || "/dashboard";
 
   if (error) {
     return NextResponse.redirect(new URL(`/auth/signin?error=github_auth_denied`, request.url));
@@ -18,7 +20,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/signin?error=missing_code", request.url));
   }
 
-  const cookieStore = await cookies();
   const savedState = cookieStore.get("gh-oauth-state")?.value;
 
   if (!savedState || savedState !== state) {
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   cookieStore.delete("gh-oauth-state");
+  cookieStore.delete("gh-oauth-redirect");
 
   try {
     const token = await exchangeCodeForToken(code);
@@ -119,9 +121,15 @@ export async function GET(request: NextRequest) {
 
     if (!user) throw new Error("Failed to create/link user");
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
+    const fullRedirect = redirectTo.startsWith("http") ? redirectTo : `${appUrl}${redirectTo}`;
+
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: primaryEmail,
+      options: {
+        redirectTo: fullRedirect,
+      },
     });
 
     if (linkError || !linkData) {
@@ -129,27 +137,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/auth/signin?error=session_failed", request.url));
     }
 
-    let supabaseResponse = NextResponse.redirect(linkData.properties.action_link);
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, ...options }) => {
-              request.cookies.set(name, value);
-              supabaseResponse.cookies.set(name, value, options as any);
-            });
-          },
-        },
-      }
-    );
-
-    return supabaseResponse;
+    return NextResponse.redirect(linkData.properties.action_link);
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(new URL("/auth/signin?error=github_auth_failed", request.url));
