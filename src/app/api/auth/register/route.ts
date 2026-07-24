@@ -58,8 +58,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({
-      message: "Account created. Check your email for the verification code.",
+      message: "Account created successfully.",
       email: email.toLowerCase(),
+      tempPassword,
     });
   } catch (error) {
     console.error("Registration error:", error);

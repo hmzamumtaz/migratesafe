@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowRight, Check, Loader2, Mail } from "lucide-react";
+import { Shield, ArrowRight, Check, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
@@ -14,9 +14,6 @@ function SignUpForm() {
   const [role, setRole] = useState("member");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [success, setSuccess] = useState("");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,39 +35,23 @@ function SignUpForm() {
       }
 
       const supabase = getSupabaseBrowser();
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email });
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: data.tempPassword,
+      });
 
-      if (otpError) {
-        setError("Account created but failed to send verification code: " + otpError.message);
+      if (signInError) {
+        setError("Account created but sign-in failed: " + signInError.message);
         setLoading(false);
         return;
       }
 
-      setOtpSent(true);
-      setSuccess("Verification code sent! Check your inbox.");
+      router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Network error. Please try again.");
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  const verifyOtp = async () => {
-    if (!otp || otp.length !== 6) return;
-    setLoading(true);
-    setError("");
-    try {
-      const supabase = getSupabaseBrowser();
-      const { error: verifyError } = await supabase.auth.verifyOtp({ email, token: otp, type: "email" });
-      if (verifyError) {
-        setError("Invalid or expired code. Please try again.");
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    }
-    setLoading(false);
   };
 
   return (
@@ -85,52 +66,30 @@ function SignUpForm() {
       <h1 className="text-xl font-bold text-[var(--text-primary)] text-center mb-1">Create your account</h1>
       <p className="text-sm text-[var(--text-secondary)] text-center mb-6">Start reviewing migrations for safety. Free tier included.</p>
 
-      {success && (
-        <div className="mb-4 px-3 py-2 rounded-lg bg-[#1E7A46]/10 text-[#1E7A46] dark:text-[#34D27B] text-sm flex items-center gap-2">
-          <Check className="h-4 w-4 flex-shrink-0" />
-          {success}
-        </div>
-      )}
       {error && <div className="mb-4 px-3 py-2 rounded-lg bg-[#B3261E]/10 text-[#B3261E] dark:text-[#F87171] text-sm">{error}</div>}
 
-      {!otpSent ? (
-        <form onSubmit={handleRegister} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Full name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="Sarah Chen" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="you@company.com" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand">
-              <option value="member">Engineer</option>
-              <option value="admin">DBA / Admin</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
-          <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
-            {!loading && <ArrowRight className="h-4 w-4" />}
-          </button>
-        </form>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Verification code</label>
-            <input type="text" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)] text-center text-lg tracking-[0.5em] font-mono" placeholder="000000" autoFocus />
-          </div>
-          <button onClick={verifyOtp} disabled={loading || otp.length !== 6} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & sign in"}
-            {!loading && <ArrowRight className="h-4 w-4" />}
-          </button>
-          <button onClick={() => { setOtpSent(false); setOtp(""); setSuccess(""); }} className="w-full text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors">
-            Use a different email
-          </button>
+      <form onSubmit={handleRegister} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Full name</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="Sarah Chen" />
         </div>
-      )}
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Role</label>
+          <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand">
+            <option value="member">Engineer</option>
+            <option value="admin">DBA / Admin</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </div>
+        <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
+          {!loading && <ArrowRight className="h-4 w-4" />}
+        </button>
+      </form>
 
       <div className="mt-4 flex items-center gap-2 justify-center text-xs text-[var(--text-tertiary)]">
         <Check className="h-3 w-3" />
