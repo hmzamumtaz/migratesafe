@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   const cookieStore = await cookies();
-  const redirectTo = cookieStore.get("gh-oauth-redirect")?.value || "/dashboard";
+  const redirectTo = cookieStore.get("gh-oauth-redirect")?.value || "/repos";
 
   if (error) {
     return NextResponse.redirect(new URL(`/auth/signin?error=github_auth_denied`, request.url));
@@ -122,22 +122,7 @@ export async function GET(request: NextRequest) {
     if (!user) throw new Error("Failed to create/link user");
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
-    const fullRedirect = redirectTo.startsWith("http") ? redirectTo : `${appUrl}${redirectTo}`;
-
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: primaryEmail,
-      options: {
-        redirectTo: fullRedirect,
-      },
-    });
-
-    if (linkError || !linkData) {
-      console.error("Failed to generate sign-in link:", linkError);
-      return NextResponse.redirect(new URL("/auth/signin?error=session_failed", request.url));
-    }
-
-    return NextResponse.redirect(linkData.properties.action_link);
+    return NextResponse.redirect(`${appUrl}/auth/signin?gh=connected&email=${encodeURIComponent(primaryEmail)}&redirect=${encodeURIComponent(redirectTo)}`);
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(new URL("/auth/signin?error=github_auth_failed", request.url));
