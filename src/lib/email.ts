@@ -85,66 +85,6 @@ export async function sendWelcomeEmail(email: string, name: string) {
   }
 }
 
-export async function sendOTPEmail(email: string, name: string, code: string) {
-  try {
-    await resend.emails.send({
-      from: fromEmail,
-      to: email,
-      subject: `Your MigrateSafe verification code: ${code}`,
-      html: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: #0E1116; }
-    .container { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
-    .header { text-align: center; margin-bottom: 32px; }
-    .logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-    .logo-box { width: 36px; height: 36px; background: #1F5FAD; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
-    .logo-icon { color: white; font-size: 18px; }
-    .logo-text { color: #E6E9EF; font-size: 18px; font-weight: 700; }
-    h1 { color: #E6E9EF; font-size: 24px; font-weight: 700; margin: 0 0 12px; }
-    p { color: #9AA4B2; font-size: 15px; line-height: 1.6; margin: 0 0 16px; }
-    .code-box { background: #171B22; border: 1px solid #2A2F3A; border-radius: 12px; padding: 32px; margin: 24px 0; text-align: center; }
-    .code { color: #E6E9EF; font-size: 36px; font-weight: 700; letter-spacing: 8px; font-family: 'JetBrains Mono', monospace; }
-    .note { background: #171B22; border: 1px solid #2A2F3A; border-radius: 8px; padding: 16px; margin: 16px 0; }
-    .note p { margin: 0; color: #6B7280; font-size: 13px; }
-    .footer { text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #2A2F3A; }
-    .footer p { color: #6B7280; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <div class="logo">
-        <div class="logo-box"><span class="logo-icon">🛡</span></div>
-        <span class="logo-text">MigrateSafe</span>
-      </div>
-      <h1>Verify your email</h1>
-      <p>Hi ${name}, use the code below to verify your email address.</p>
-    </div>
-
-    <div class="code-box">
-      <div class="code">${code}</div>
-    </div>
-
-    <div class="note">
-      <p>This code expires in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
-    </div>
-
-    <div class="footer">
-      <p>MigrateSafe — AI-Powered Migration Safety Reviews</p>
-    </div>
-  </div>
-</body>
-</html>`,
-    });
-    return true;
-  } catch (error) {
-    console.error("Failed to send OTP email:", error);
-    return false;
-  }
-}
-
 export async function sendVerdictEmail(
   email: string,
   name: string,

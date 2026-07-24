@@ -37,13 +37,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL("/auth/signin?error=no_email", request.url));
     }
 
-    let user = null;
-
     const { data: existingByGithub } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("githubId", String(ghUser.id))
       .single();
+
+    let user = null;
 
     if (existingByGithub) {
       const { data: updated } = await supabaseAdmin
@@ -75,9 +75,24 @@ export async function GET(request: NextRequest) {
           .single();
         user = updated;
       } else {
+        const randomPassword = `gh-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: primaryEmail,
+          password: randomPassword,
+          email_confirm: true,
+          user_metadata: { name: ghUser.name || ghUser.login, role: "member" },
+        });
+
+        if (authError) {
+          console.error("GitHub auth user creation error:", authError);
+          return NextResponse.redirect(new URL("/auth/signin?error=account_creation_failed", request.url));
+        }
+
         const { data: created } = await supabaseAdmin
           .from("users")
           .insert({
+            id: authData.user.id,
             email: primaryEmail,
             name: ghUser.name || ghUser.login,
             password: "",
@@ -90,12 +105,31 @@ export async function GET(request: NextRequest) {
           .select()
           .single();
         user = created;
+
+        const periodEnd = new Date();
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        await supabaseAdmin.from("subscriptions").insert({
+          userId: authData.user.id,
+          plan: "free",
+          analysesIncluded: 50,
+          periodEnd: periodEnd.toISOString(),
+        });
       }
     }
 
     if (!user) throw new Error("Failed to create/link user");
 
-    let supabaseResponse = NextResponse.redirect(new URL("/dashboard", request.url));
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email: primaryEmail,
+    });
+
+    if (linkError || !linkData) {
+      console.error("Failed to generate sign-in link:", linkError);
+      return NextResponse.redirect(new URL("/auth/signin?error=session_failed", request.url));
+    }
+
+    let supabaseResponse = NextResponse.redirect(linkData.properties.action_link);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -114,14 +148,6 @@ export async function GET(request: NextRequest) {
         },
       }
     );
-
-    const { error: signInError } = await supabase.auth.signInWithOtp({
-      email: primaryEmail,
-    });
-
-    if (signInError) {
-      console.error("GitHub auth sign-in error:", signInError);
-    }
 
     return supabaseResponse;
   } catch (err) {

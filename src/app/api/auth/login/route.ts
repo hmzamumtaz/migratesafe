@@ -24,10 +24,10 @@ export async function POST(req: NextRequest) {
   );
 
   try {
-    const { email } = await req.json();
+    const { email, password } = await req.json();
 
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
 
     const { data: existingUser } = await supabaseAdmin
@@ -37,22 +37,19 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!existingUser) {
-      return NextResponse.json({ error: "No account found with this email" }, { status: 404 });
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
+    const { data: sessionData, error: signInError } = await supabase.auth.signInWithPassword({
       email: email.toLowerCase(),
+      password,
     });
 
-    if (otpError) {
-      console.error("OTP send error:", otpError);
-      return NextResponse.json({ error: "Failed to send verification code" }, { status: 500 });
+    if (signInError) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    return NextResponse.json({
-      message: "Verification code sent to your email",
-      email: email.toLowerCase(),
-    });
+    return supabaseResponse;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

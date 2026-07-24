@@ -1,33 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request: req });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, ...options }) => {
-            req.cookies.set(name, value);
-            supabaseResponse.cookies.set(name, value, options as any);
-          });
-        },
-      },
-    }
-  );
-
   try {
-    const { email, name, role } = await req.json();
+    const { email, name, password, role } = await req.json();
 
-    if (!email || !name) {
-      return NextResponse.json({ error: "Email and name are required" }, { status: 400 });
+    if (!email || !name || !password) {
+      return NextResponse.json({ error: "Email, name, and password are required" }, { status: 400 });
+    }
+
+    if (password.length < 6) {
+      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
     }
 
     const { data: existingUser } = await supabaseAdmin
@@ -40,22 +23,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase(),
-      options: {
-        data: { name, role: role || "member" },
-      },
+      password,
+      email_confirm: true,
+      user_metadata: { name, role: role || "member" },
     });
 
-    if (otpError) {
-      console.error("OTP send error:", otpError);
-      return NextResponse.json({ error: "Failed to send verification code" }, { status: 500 });
+    if (authError) {
+      console.error("Auth user creation error:", authError);
+      return NextResponse.json({ error: authError.message || "Failed to create account" }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: "Verification code sent to your email",
+    const authUser = authData.user;
+
+    const { error: customError } = await supabaseAdmin.from("users").insert({
+      id: authUser.id,
       email: email.toLowerCase(),
-      requiresVerification: true,
+      name,
+      password: "",
+      role: role || "member",
+      emailVerified: true,
+    });
+
+    if (customError) {
+      console.error("Custom user creation error:", customError);
+    }
+
+    const periodEnd = new Date();
+    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    await supabaseAdmin.from("subscriptions").insert({
+      userId: authUser.id,
+      plan: "free",
+      analysesIncluded: 50,
+      periodEnd: periodEnd.toISOString(),
+    });
+
+    return NextResponse.json({
+      message: "Account created successfully",
+      email: email.toLowerCase(),
     });
   } catch (error) {
     console.error("Registration error:", error);
