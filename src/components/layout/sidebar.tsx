@@ -15,6 +15,7 @@ import {
   Moon,
   LogOut,
   ChevronLeft,
+  User,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -27,6 +28,7 @@ const navItems = [
 
 const bottomItems = [
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/account", label: "Account", icon: User },
   { href: "/billing", label: "Billing", icon: CreditCard },
 ];
 

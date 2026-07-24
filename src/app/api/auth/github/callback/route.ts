@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, getGitHubUser, getUserEmails } from "@/lib/github";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -12,19 +11,19 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
   const redirectTo = cookieStore.get("gh-oauth-redirect")?.value || "/repos";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
 
   if (error) {
-    return NextResponse.redirect(new URL(`/auth/signin?error=github_auth_denied`, request.url));
+    return NextResponse.redirect(`${appUrl}/auth/signin?error=github_auth_denied`);
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/auth/signin?error=missing_code", request.url));
+    return NextResponse.redirect(`${appUrl}/auth/signin?error=missing_code`);
   }
 
   const savedState = cookieStore.get("gh-oauth-state")?.value;
-
   if (!savedState || savedState !== state) {
-    return NextResponse.redirect(new URL("/auth/signin?error=invalid_state", request.url));
+    return NextResponse.redirect(`${appUrl}/auth/signin?error=invalid_state`);
   }
 
   cookieStore.delete("gh-oauth-state");
@@ -37,32 +36,8 @@ export async function GET(request: NextRequest) {
     const primaryEmail = emails.find((e: any) => e.primary)?.email || ghUser.email;
 
     if (!primaryEmail) {
-      return NextResponse.redirect(new URL("/auth/signin?error=no_email", request.url));
+      return NextResponse.redirect(`${appUrl}/auth/signin?error=no_email`);
     }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
-
-    let supabaseResponse = NextResponse.redirect(new URL(`${appUrl}/auth/signin?gh=connected&email=${encodeURIComponent(primaryEmail)}&redirect=${encodeURIComponent(redirectTo)}`));
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, ...options }) => {
-              request.cookies.set(name, value);
-              supabaseResponse.cookies.set(name, value, options as any);
-            });
-          },
-        },
-      }
-    );
-
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
 
     const { data: existingByGithub } = await supabaseAdmin
       .from("users")
@@ -103,7 +78,6 @@ export async function GET(request: NextRequest) {
         user = updated;
       } else {
         const randomPassword = `gh-${Date.now()}-${Math.random().toString(36).slice(2)}!`;
-
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: primaryEmail,
           password: randomPassword,
@@ -113,7 +87,7 @@ export async function GET(request: NextRequest) {
 
         if (authError) {
           console.error("GitHub auth user creation error:", authError);
-          return NextResponse.redirect(new URL("/auth/signin?error=account_creation_failed", request.url));
+          return NextResponse.redirect(`${appUrl}/auth/signin?error=account_creation_failed`);
         }
 
         const { data: created } = await supabaseAdmin
@@ -146,13 +120,9 @@ export async function GET(request: NextRequest) {
 
     if (!user) throw new Error("Failed to create/link user");
 
-    if (currentUser) {
-      supabaseResponse = NextResponse.redirect(`${appUrl}${redirectTo}`);
-    }
-
-    return supabaseResponse;
+    return NextResponse.redirect(`${appUrl}${redirectTo}`);
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
-    return NextResponse.redirect(new URL("/auth/signin?error=github_auth_failed", request.url));
+    return NextResponse.redirect(`${appUrl}/auth/signin?error=github_auth_failed`);
   }
 }
