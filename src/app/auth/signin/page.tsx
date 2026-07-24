@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Shield, ArrowRight, Loader2, Check } from "lucide-react";
+import { Shield, ArrowRight, Loader2, Check, Mail, KeyRound } from "lucide-react";
 import { GithubIcon } from "@/components/ui/github-icon";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
@@ -13,9 +13,12 @@ function SignInForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [ghMessage, setGhMessage] = useState("");
+  const [success, setSuccess] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [mode, setMode] = useState<"otp" | "password">("otp");
   const [ghRedirect, setGhRedirect] = useState("/repos");
 
   useEffect(() => {
@@ -26,7 +29,7 @@ function SignInForm() {
 
     if (gh === "connected" && emailParam) {
       setEmail(emailParam);
-      setGhMessage("GitHub connected! Sign in with your password to continue.");
+      setSuccess("GitHub connected! Verify your email to sign in.");
       setGhRedirect(redirectParam || "/repos");
     }
 
@@ -38,32 +41,67 @@ function SignInForm() {
         no_email: "No email found from GitHub account.",
         github_auth_failed: "GitHub authentication failed.",
         account_creation_failed: "Failed to create account.",
-        session_failed: "Failed to create session.",
       };
       setError(errors[errorParam] || "An error occurred.");
     }
   }, [searchParams]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const sendOtp = async () => {
+    if (!email) return;
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const supabase = getSupabaseBrowser();
+      const { error: otpError } = await supabase.auth.signInWithOtp({ email });
+      if (otpError) {
+        setError(otpError.message || "Failed to send verification code. Check your email settings in Supabase dashboard.");
+      } else {
+        setOtpSent(true);
+        setSuccess("Verification code sent! Check your inbox.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    }
+    setLoading(false);
+  };
+
+  const verifyOtp = async () => {
+    if (!otp || otp.length !== 6) return;
+    setLoading(true);
+    setError("");
+    try {
+      const supabase = getSupabaseBrowser();
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: "email",
+      });
+      if (verifyError) {
+        setError("Invalid or expired code. Please try again.");
+      } else {
+        router.push(ghRedirect);
+        router.refresh();
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    }
+    setLoading(false);
+  };
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const supabase = getSupabaseBrowser();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) {
         setError("Invalid email or password");
-        setLoading(false);
-        return;
+      } else {
+        router.push(ghRedirect);
+        router.refresh();
       }
-
-      router.push(ghRedirect);
-      router.refresh();
     } catch {
       setError("Network error. Please try again.");
     }
@@ -82,29 +120,65 @@ function SignInForm() {
       <h1 className="text-xl font-bold text-[var(--text-primary)] text-center mb-1">Welcome back</h1>
       <p className="text-sm text-[var(--text-secondary)] text-center mb-6">Sign in to your MigrateSafe account.</p>
 
-      {ghMessage && (
-        <div className="mb-4 px-3 py-2 rounded-lg bg-[#1F5FAD]/10 text-brand text-sm flex items-center gap-2">
+      {success && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-[#1E7A46]/10 text-[#1E7A46] dark:text-[#34D27B] text-sm flex items-center gap-2">
           <Check className="h-4 w-4 flex-shrink-0" />
-          {ghMessage}
+          {success}
         </div>
       )}
-
       {error && <div className="mb-4 px-3 py-2 rounded-lg bg-[#B3261E]/10 text-[#B3261E] dark:text-[#F87171] text-sm">{error}</div>}
 
-      <form onSubmit={handleLogin} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="you@company.com" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="Your password" />
-        </div>
-        <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
-          {!loading && <ArrowRight className="h-4 w-4" />}
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => { setMode("otp"); setError(""); setSuccess(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "otp" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
+          <Mail className="h-4 w-4 inline mr-1.5" /> Email code
         </button>
-      </form>
+        <button onClick={() => { setMode("password"); setError(""); setSuccess(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "password" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
+          <KeyRound className="h-4 w-4 inline mr-1.5" /> Password
+        </button>
+      </div>
+
+      {mode === "otp" ? (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={otpSent} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)] disabled:opacity-50" placeholder="you@company.com" />
+          </div>
+          {!otpSent ? (
+            <button onClick={sendOtp} disabled={loading || !email} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Send verification code
+            </button>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Verification code</label>
+                <input type="text" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)] text-center text-lg tracking-[0.5em] font-mono" placeholder="000000" autoFocus />
+              </div>
+              <button onClick={verifyOtp} disabled={loading || otp.length !== 6} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
+                {!loading && <ArrowRight className="h-4 w-4" />}
+              </button>
+              <button onClick={() => { setOtpSent(false); setOtp(""); setSuccess(""); }} className="w-full text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors">
+                Use a different email
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={handlePasswordLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="you@company.com" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[var(--text-tertiary)]" placeholder="Your password" />
+          </div>
+          <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
+            {!loading && <ArrowRight className="h-4 w-4" />}
+          </button>
+        </form>
+      )}
 
       <div className="my-6 flex items-center gap-3">
         <div className="flex-1 h-px bg-[var(--border)]" />

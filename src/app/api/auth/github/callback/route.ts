@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, getGitHubUser, getUserEmails } from "@/lib/github";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -38,6 +39,30 @@ export async function GET(request: NextRequest) {
     if (!primaryEmail) {
       return NextResponse.redirect(new URL("/auth/signin?error=no_email", request.url));
     }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
+
+    let supabaseResponse = NextResponse.redirect(new URL(`${appUrl}/auth/signin?gh=connected&email=${encodeURIComponent(primaryEmail)}&redirect=${encodeURIComponent(redirectTo)}`));
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, ...options }) => {
+              request.cookies.set(name, value);
+              supabaseResponse.cookies.set(name, value, options as any);
+            });
+          },
+        },
+      }
+    );
+
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
 
     const { data: existingByGithub } = await supabaseAdmin
       .from("users")
@@ -77,7 +102,7 @@ export async function GET(request: NextRequest) {
           .single();
         user = updated;
       } else {
-        const randomPassword = `gh-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const randomPassword = `gh-${Date.now()}-${Math.random().toString(36).slice(2)}!`;
 
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: primaryEmail,
@@ -121,8 +146,11 @@ export async function GET(request: NextRequest) {
 
     if (!user) throw new Error("Failed to create/link user");
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://migratesafe.vercel.app";
-    return NextResponse.redirect(`${appUrl}/auth/signin?gh=connected&email=${encodeURIComponent(primaryEmail)}&redirect=${encodeURIComponent(redirectTo)}`);
+    if (currentUser) {
+      supabaseResponse = NextResponse.redirect(`${appUrl}${redirectTo}`);
+    }
+
+    return supabaseResponse;
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(new URL("/auth/signin?error=github_auth_failed", request.url));

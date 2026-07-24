@@ -3,14 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, name, password, role } = await req.json();
+    const { email, name, role } = await req.json();
 
-    if (!email || !name || !password) {
-      return NextResponse.json({ error: "Email, name, and password are required" }, { status: 400 });
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+    if (!email || !name) {
+      return NextResponse.json({ error: "Email and name are required" }, { status: 400 });
     }
 
     const { data: existingUser } = await supabaseAdmin
@@ -23,9 +19,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
 
+    const tempPassword = `ms-${Date.now()}-${Math.random().toString(36).slice(2)}!`;
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase(),
-      password,
+      password: tempPassword,
       email_confirm: true,
       user_metadata: { name, role: role || "member" },
     });
@@ -60,7 +58,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({
-      message: "Account created successfully",
+      message: "Account created. Check your email for the verification code.",
       email: email.toLowerCase(),
     });
   } catch (error) {
