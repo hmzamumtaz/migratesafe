@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/contexts/theme-provider";
-import { ArrowLeft, Sun, Moon, Trash2, GitBranch, Loader2, Check, User, Mail, Shield, Calendar } from "lucide-react";
+import { ArrowLeft, Sun, Moon, Trash2, Loader2, Check, User, Shield, Calendar } from "lucide-react";
 import { GithubIcon } from "@/components/ui/github-icon";
 import { LoadingCardSkeleton } from "@/components/design-system/states";
 

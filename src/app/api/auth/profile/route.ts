@@ -80,17 +80,28 @@ export async function DELETE() {
 
     const userId = session.userId;
 
-    await supabaseAdmin.from("findings").delete().in("checkId",
-      (await supabaseAdmin.from("migration_checks").select("id").eq("repositoryId",
-        (await supabaseAdmin.from("repositories").select("id").eq("userId", userId)).data?.map((r: any) => r.id) || ["00000000-0000-0000-0000-000000000000"]
-      )).data?.map((c: any) => c.id) || []
-    );
+    const { data: repos } = await supabaseAdmin
+      .from("repositories")
+      .select("id")
+      .eq("userId", userId);
 
-    const repoIds = (await supabaseAdmin.from("repositories").select("id").eq("userId", userId)).data?.map((r: any) => r.id) || [];
+    const repoIds = repos?.map((r: any) => r.id) || [];
+
     if (repoIds.length > 0) {
+      const { data: checks } = await supabaseAdmin
+        .from("migration_checks")
+        .select("id")
+        .in("repositoryId", repoIds);
+
+      const checkIds = checks?.map((c: any) => c.id) || [];
+
+      if (checkIds.length > 0) {
+        await supabaseAdmin.from("findings").delete().in("checkId", checkIds);
+      }
+
       await supabaseAdmin.from("audit_entries").delete().in("repositoryId", repoIds);
-      await supabaseAdmin.from("migration_checks").delete().in("repositoryId", repoIds);
       await supabaseAdmin.from("database_connections").delete().in("repositoryId", repoIds);
+      await supabaseAdmin.from("migration_checks").delete().in("repositoryId", repoIds);
       await supabaseAdmin.from("repositories").delete().in("id", repoIds);
     }
 

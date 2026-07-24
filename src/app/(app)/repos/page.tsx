@@ -248,7 +248,7 @@ export default function ReposPage() {
                   <div className="text-center py-6">
                     <GithubIcon className="h-10 w-10 mx-auto text-[var(--text-tertiary)] mb-3" />
                     <p className="text-sm text-[var(--text-secondary)] mb-1">Connect your GitHub account to import repositories.</p>
-                    <p className="text-xs text-[var(--text-tertiary)] mb-4">We only request read access to your repositories.</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mb-4">We only request read-only access to your repositories.</p>
                     <button onClick={connectGitHub} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#24292f] rounded-lg hover:bg-[#1c2128] transition-colors">
                       <GithubIcon className="h-4 w-4" /> Connect GitHub account
                     </button>
@@ -313,7 +313,6 @@ export default function ReposPage() {
                     <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Provider</label>
                     <select value={newRepo.provider} onChange={(e) => setNewRepo({ ...newRepo, provider: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand">
                       <option value="github">GitHub</option>
-                      <option value="gitlab">GitLab</option>
                     </select>
                   </div>
                   <div>

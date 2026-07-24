@@ -6,7 +6,7 @@ export function getGitHubAuthURL(state: string): string {
   const params = new URLSearchParams({
     client_id: GITHUB_CLIENT_ID,
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/github/callback`,
-    scope: "read:user user:email repo",
+    scope: "read:user user:email read:repo",
     state,
   });
   return `https://github.com/login/oauth/authorize?${params.toString()}`;
@@ -39,7 +39,7 @@ export async function getGitHubUser(token: string) {
   return res.json();
 }
 
-export async function getUserEmails(token: string) {
+export async function getUserEmails(token: string): Promise<Array<{ email: string; primary: boolean; verified: boolean }>> {
   const res = await fetch(`${GITHUB_API}/user/emails`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   });

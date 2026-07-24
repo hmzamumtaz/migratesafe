@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { generateRollbackScript } from "@/lib/ai-analysis";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -13,11 +13,6 @@ const PUBLIC_PATHS = [
   "/api/auth/github",
   "/api/auth/github/callback",
   "/api/webhooks",
-  "/api/repositories",
-  "/api/checks",
-  "/api/usage",
-  "/api/admin",
-  "/api/team",
   "/_next",
   "/favicon.ico",
 ];

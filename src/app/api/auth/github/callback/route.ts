@@ -120,7 +120,9 @@ export async function GET(request: NextRequest) {
 
     if (!user) throw new Error("Failed to create/link user");
 
-    return NextResponse.redirect(`${appUrl}${redirectTo}`);
+    return NextResponse.redirect(
+      `${appUrl}/auth/signin?email=${encodeURIComponent(primaryEmail)}&gh=connected&redirect=${encodeURIComponent(redirectTo)}`
+    );
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(`${appUrl}/auth/signin?error=github_auth_failed`);

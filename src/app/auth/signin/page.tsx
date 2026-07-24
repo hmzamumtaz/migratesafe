@@ -27,10 +27,12 @@ function SignInForm() {
     const redirectParam = searchParams.get("redirect");
     const errorParam = searchParams.get("error");
 
+    if (emailParam) setEmail(emailParam);
+    if (redirectParam) setGhRedirect(redirectParam);
+
     if (gh === "connected" && emailParam) {
-      setEmail(emailParam);
-      setSuccess("GitHub connected! Verify your email to sign in.");
-      setGhRedirect(redirectParam || "/repos");
+      setSuccess("GitHub connected! Enter the verification code sent to your email to sign in.");
+      setMode("otp");
     }
 
     if (errorParam) {
@@ -55,7 +57,7 @@ function SignInForm() {
       const supabase = getSupabaseBrowser();
       const { error: otpError } = await supabase.auth.signInWithOtp({ email });
       if (otpError) {
-        setError(otpError.message || "Failed to send verification code. Check your email settings in Supabase dashboard.");
+        setError(otpError.message || "Failed to send verification code. Try again in a few minutes.");
       } else {
         setOtpSent(true);
         setSuccess("Verification code sent! Check your inbox.");
@@ -129,10 +131,10 @@ function SignInForm() {
       {error && <div className="mb-4 px-3 py-2 rounded-lg bg-[#B3261E]/10 text-[#B3261E] dark:text-[#F87171] text-sm">{error}</div>}
 
       <div className="flex gap-2 mb-4">
-        <button onClick={() => { setMode("otp"); setError(""); setSuccess(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "otp" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
+        <button onClick={() => { setMode("otp"); setError(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "otp" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
           <Mail className="h-4 w-4 inline mr-1.5" /> Email code
         </button>
-        <button onClick={() => { setMode("password"); setError(""); setSuccess(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "password" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
+        <button onClick={() => { setMode("password"); setError(""); }} className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${mode === "password" ? "bg-brand text-white" : "bg-[var(--bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}>
           <KeyRound className="h-4 w-4 inline mr-1.5" /> Password
         </button>
       </div>

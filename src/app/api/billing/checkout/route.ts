@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { createCheckout, PLAN_VARIANT_IDS } from "@/lib/billing";
 import { getSession } from "@/lib/auth";
 

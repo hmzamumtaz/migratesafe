@@ -7,8 +7,6 @@ export const supabaseAdmin = createSupabaseClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export const supabase = supabaseAdmin;
-
 export async function createClient() {
   const cookieStore = await cookies();
 
