@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getGitHubAuthURL } from "@/lib/github";
 import { cookies } from "next/headers";
-import { signToken } from "@/lib/auth";
 import crypto from "crypto";
 
 export async function GET() {

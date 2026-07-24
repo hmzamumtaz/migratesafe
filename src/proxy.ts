@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
-
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-secret");
+import { createServerClient } from "@supabase/ssr";
 
 const PUBLIC_PATHS = [
   "/",
@@ -38,27 +36,35 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("ms-token")?.value;
+  let supabaseResponse = NextResponse.next({ request });
 
-  if (!token) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, ...options }) => {
+            request.cookies.set(name, value);
+            supabaseResponse.cookies.set(name, value, options as any);
+          });
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
     const url = new URL("/auth/signin", request.url);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
 
-  try {
-    const { payload } = await jwtVerify(token, secret);
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-user-id", payload.userId as string);
-    requestHeaders.set("x-user-email", payload.email as string);
-    requestHeaders.set("x-user-role", payload.role as string);
-
-    return NextResponse.next({ request: { headers: requestHeaders } });
-  } catch {
-    const response = NextResponse.redirect(new URL("/auth/signin", request.url));
-    response.cookies.delete("ms-token");
-    return response;
-  }
+  return supabaseResponse;
 }
 
 export const config = {

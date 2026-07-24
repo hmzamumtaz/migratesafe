@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForToken, getGitHubUser, getUserEmails } from "@/lib/github";
-import { supabase } from "@/lib/supabase";
-import { signToken, setSessionCookie } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
-import { hashSync } from "bcryptjs";
-import crypto from "crypto";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -41,14 +39,14 @@ export async function GET(request: NextRequest) {
 
     let user = null;
 
-    const { data: existingByGithub } = await supabase
+    const { data: existingByGithub } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("githubId", String(ghUser.id))
       .single();
 
     if (existingByGithub) {
-      const { data: updated } = await supabase
+      const { data: updated } = await supabaseAdmin
         .from("users")
         .update({ githubToken: token, avatar: ghUser.avatar_url })
         .eq("id", existingByGithub.id)
@@ -56,14 +54,14 @@ export async function GET(request: NextRequest) {
         .single();
       user = updated;
     } else {
-      const { data: existingByEmail } = await supabase
+      const { data: existingByEmail } = await supabaseAdmin
         .from("users")
         .select("*")
         .eq("email", primaryEmail)
         .single();
 
       if (existingByEmail) {
-        const { data: updated } = await supabase
+        const { data: updated } = await supabaseAdmin
           .from("users")
           .update({
             githubId: String(ghUser.id),
@@ -77,13 +75,12 @@ export async function GET(request: NextRequest) {
           .single();
         user = updated;
       } else {
-        const randomPassword = crypto.randomBytes(32).toString("hex");
-        const { data: created } = await supabase
+        const { data: created } = await supabaseAdmin
           .from("users")
           .insert({
             email: primaryEmail,
             name: ghUser.name || ghUser.login,
-            password: hashSync(randomPassword, 12),
+            password: "",
             role: "member",
             emailVerified: true,
             githubId: String(ghUser.id),
@@ -98,15 +95,35 @@ export async function GET(request: NextRequest) {
 
     if (!user) throw new Error("Failed to create/link user");
 
-    const jwt = await signToken({
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+    let supabaseResponse = NextResponse.redirect(new URL("/dashboard", request.url));
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, ...options }) => {
+              request.cookies.set(name, value);
+              supabaseResponse.cookies.set(name, value, options as any);
+            });
+          },
+        },
+      }
+    );
+
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email: primaryEmail,
     });
 
-    await setSessionCookie(jwt);
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (signInError) {
+      console.error("GitHub auth sign-in error:", signInError);
+    }
+
+    return supabaseResponse;
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(new URL("/auth/signin?error=github_auth_failed", request.url));

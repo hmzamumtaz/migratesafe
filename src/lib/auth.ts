@@ -1,51 +1,39 @@
-import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { createClient, supabaseAdmin } from "@/lib/supabase";
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-secret");
-
-export interface JWTPayload {
+export interface SessionUser {
   userId: string;
   email: string;
   name: string;
   role: string;
 }
 
-export async function signToken(payload: JWTPayload): Promise<string> {
-  return new SignJWT(payload as unknown as Record<string, unknown>)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(secret);
-}
-
-export async function verifyToken(token: string): Promise<JWTPayload | null> {
+export async function getSession(): Promise<SessionUser | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload as unknown as JWTPayload;
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return null;
+
+    const { data: appUser } = await supabaseAdmin
+      .from("users")
+      .select("id, email, name, role")
+      .eq("email", authUser.email)
+      .single();
+
+    if (!appUser) return null;
+
+    return {
+      userId: appUser.id,
+      email: appUser.email,
+      name: appUser.name,
+      role: appUser.role,
+    };
   } catch {
     return null;
   }
 }
 
-export async function setSessionCookie(token: string) {
-  const cookieStore = await cookies();
-  cookieStore.set("ms-token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-}
-
-export async function getSession(): Promise<JWTPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("ms-token")?.value;
-  if (!token) return null;
-  return verifyToken(token);
-}
-
-export async function clearSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete("ms-token");
+export async function requireSession(): Promise<SessionUser> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+  return session;
 }
