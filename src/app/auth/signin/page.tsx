@@ -197,8 +197,24 @@ function SignInForm() {
         <div className="flex-1 h-px bg-[var(--border)]" />
       </div>
 
-      <button onClick={() => { window.location.href = "/api/auth/github?redirect=/repos"; }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--bg)] transition-colors">
-        <GithubIcon className="h-4 w-4" /> Sign in with GitHub
+      <button onClick={async () => {
+        setLoading(true);
+        setError("");
+        try {
+          const supabase = getSupabaseBrowser();
+          const { error: ghError } = await supabase.auth.signInWithOAuth({
+            provider: "github",
+            options: {
+              redirectTo: `${window.location.origin}/api/auth/github/sync`,
+            },
+          });
+          if (ghError) setError(ghError.message);
+        } catch {
+          setError("Failed to start GitHub sign-in.");
+        }
+        setLoading(false);
+      }} disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--bg)] transition-colors disabled:opacity-50">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GithubIcon className="h-4 w-4" />} Sign in with GitHub
       </button>
 
       <p className="text-center text-sm text-[var(--text-secondary)] mt-6">
