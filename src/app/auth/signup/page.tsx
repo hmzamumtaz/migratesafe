@@ -35,19 +35,15 @@ function SignUpForm() {
       }
 
       const supabase = getSupabaseBrowser();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: data.tempPassword,
-      });
+      const { error: otpError } = await supabase.auth.signInWithOtp({ email });
 
-      if (signInError) {
-        setError("Account created but sign-in failed: " + signInError.message);
+      if (otpError) {
+        setError("Account created but could not send verification code: " + otpError.message);
         setLoading(false);
         return;
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      router.push(`/auth/signin?email=${encodeURIComponent(email)}&otp_sent=true`);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);

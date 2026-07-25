@@ -26,6 +26,7 @@ function SignInForm() {
     const emailParam = searchParams.get("email");
     const redirectParam = searchParams.get("redirect");
     const errorParam = searchParams.get("error");
+    const otpSentParam = searchParams.get("otp_sent");
 
     if (emailParam) setEmail(emailParam);
     if (redirectParam) setGhRedirect(redirectParam);
@@ -33,6 +34,13 @@ function SignInForm() {
     if (gh === "connected" && emailParam) {
       setSuccess("GitHub connected! Enter the verification code sent to your email to sign in.");
       setMode("otp");
+      setOtpSent(true);
+    }
+
+    if (otpSentParam === "true" && emailParam) {
+      setSuccess("Verification code sent! Check your inbox and enter the code below.");
+      setMode("otp");
+      setOtpSent(true);
     }
 
     if (errorParam) {
@@ -43,6 +51,7 @@ function SignInForm() {
         no_email: "No email found from GitHub account.",
         github_auth_failed: "GitHub authentication failed.",
         account_creation_failed: "Failed to create account.",
+        session_creation_failed: "Failed to create session. Please try signing in with email.",
       };
       setError(errors[errorParam] || "An error occurred.");
     }

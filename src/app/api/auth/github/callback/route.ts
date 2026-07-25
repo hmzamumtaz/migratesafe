@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { exchangeCodeForToken, getGitHubUser, getUserEmails } from "@/lib/github";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cookies } from "next/headers";
@@ -39,22 +40,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${appUrl}/auth/signin?error=no_email`);
     }
 
+    let userId: string;
+
     const { data: existingByGithub } = await supabaseAdmin
       .from("users")
       .select("*")
       .eq("githubId", String(ghUser.id))
       .single();
 
-    let user = null;
-
     if (existingByGithub) {
-      const { data: updated } = await supabaseAdmin
+      userId = existingByGithub.id;
+      await supabaseAdmin
         .from("users")
         .update({ githubToken: token, avatar: ghUser.avatar_url })
-        .eq("id", existingByGithub.id)
-        .select()
-        .single();
-      user = updated;
+        .eq("id", userId);
     } else {
       const { data: existingByEmail } = await supabaseAdmin
         .from("users")
@@ -63,7 +62,8 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existingByEmail) {
-        const { data: updated } = await supabaseAdmin
+        userId = existingByEmail.id;
+        await supabaseAdmin
           .from("users")
           .update({
             githubId: String(ghUser.id),
@@ -72,10 +72,7 @@ export async function GET(request: NextRequest) {
             avatar: ghUser.avatar_url,
             emailVerified: true,
           })
-          .eq("id", existingByEmail.id)
-          .select()
-          .single();
-        user = updated;
+          .eq("id", userId);
       } else {
         const randomPassword = `gh-${Date.now()}-${Math.random().toString(36).slice(2)}!`;
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -90,27 +87,24 @@ export async function GET(request: NextRequest) {
           return NextResponse.redirect(`${appUrl}/auth/signin?error=account_creation_failed`);
         }
 
-        const { data: created } = await supabaseAdmin
-          .from("users")
-          .insert({
-            id: authData.user.id,
-            email: primaryEmail,
-            name: ghUser.name || ghUser.login,
-            password: "",
-            role: "member",
-            emailVerified: true,
-            githubId: String(ghUser.id),
-            githubToken: token,
-            avatar: ghUser.avatar_url,
-          })
-          .select()
-          .single();
-        user = created;
+        userId = authData.user.id;
+
+        await supabaseAdmin.from("users").insert({
+          id: userId,
+          email: primaryEmail,
+          name: ghUser.name || ghUser.login,
+          password: "",
+          role: "member",
+          emailVerified: true,
+          githubId: String(ghUser.id),
+          githubToken: token,
+          avatar: ghUser.avatar_url,
+        });
 
         const periodEnd = new Date();
         periodEnd.setMonth(periodEnd.getMonth() + 1);
         await supabaseAdmin.from("subscriptions").insert({
-          userId: authData.user.id,
+          userId,
           plan: "free",
           analysesIncluded: 50,
           periodEnd: periodEnd.toISOString(),
@@ -118,11 +112,39 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (!user) throw new Error("Failed to create/link user");
+    const signInPassword = `gh-sess-${Date.now()}-${Math.random().toString(36).slice(2)}!`;
+    await supabaseAdmin.auth.admin.updateUserById(userId, { password: signInPassword });
 
-    return NextResponse.redirect(
-      `${appUrl}/auth/signin?email=${encodeURIComponent(primaryEmail)}&gh=connected&redirect=${encodeURIComponent(redirectTo)}`
+    const supabaseResponse = NextResponse.redirect(`${appUrl}${redirectTo}`);
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, ...options }) => {
+              request.cookies.set(name, value);
+              supabaseResponse.cookies.set(name, value, options as any);
+            });
+          },
+        },
+      }
     );
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: primaryEmail,
+      password: signInPassword,
+    });
+
+    if (signInError) {
+      console.error("GitHub session creation error:", signInError);
+      return NextResponse.redirect(`${appUrl}/auth/signin?email=${encodeURIComponent(primaryEmail)}&gh=connected&redirect=${encodeURIComponent(redirectTo)}`);
+    }
+
+    return supabaseResponse;
   } catch (err) {
     console.error("GitHub OAuth callback error:", err);
     return NextResponse.redirect(`${appUrl}/auth/signin?error=github_auth_failed`);

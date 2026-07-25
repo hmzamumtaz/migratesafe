@@ -1,8 +1,6 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   GITHUB_CLIENT_ID: z.string().optional(),

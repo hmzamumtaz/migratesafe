@@ -32,7 +32,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let supabaseResponse = NextResponse.next({ request });
+  const supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,11 +52,18 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
     const url = new URL("/auth/signin", request.url);
     url.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  if (user && pathname.startsWith("/auth")) {
+    const url = new URL("/repos", request.url);
     return NextResponse.redirect(url);
   }
 

@@ -60,7 +60,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       message: "Account created successfully.",
       email: email.toLowerCase(),
-      tempPassword,
     });
   } catch (error) {
     console.error("Registration error:", error);
